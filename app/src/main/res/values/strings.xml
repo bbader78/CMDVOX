@@ -1,5 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">CMD VOX</string>
-
+<string name="app_name">CMD VOX</string><string name="subtitle">Comandi vocali rapidi</string><string name="voice_control">Controllo vocale</string><string name="voice_hint">Avvia l’ascolto e pronuncia uno dei comandi configurati.</string>
+<string name="start_listening">Avvia ascolto</string><string name="stop">Interrompi</string><string name="enable_media_control">Abilita controllo multimediale</string><string name="commands">I tuoi comandi</string><string name="add_command">Aggiungi</string><string name="save">Salva</string><string name="delete">Elimina comando</string>
+<string name="phrase_hint">Frase da riconoscere</string><string name="value_hint">Valore (secondi, package o URL)</string><string name="microphone_required">Il permesso microfono è necessario.</string><string name="listening_started">CMD VOX è in ascolto.</string><string name="stopped">Ascolto interrotto.</string>
+<string name="listening_title">CMD VOX in ascolto</string><string name="listening_description">Pronuncia un comando configurato</string><string name="channel_name">Riconoscimento vocale</string><string name="seek_description">Avanza di %1$s secondi</string><string name="open_app_description">Apri app: %1$s</string><string name="open_url_description">Apri URL: %1$s</string>
+<string-array name="action_labels"><item>Riproduci</item><item>Pausa</item><item>Traccia successiva</item><item>Traccia precedente</item><item>Avanza (secondi)</item><item>Apri applicazione</item><item>Apri URL</item></string-array>
 </resources>
