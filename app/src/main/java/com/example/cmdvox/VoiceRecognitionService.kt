@@ -14,6 +14,9 @@ import java.util.Locale
 class VoiceRecognitionService : Service(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var stopping = false
+    private var lastCommandId: String? = null
+    private var lastExecution = 0L
+    private val restart = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
@@ -25,6 +28,7 @@ class VoiceRecognitionService : Service(), RecognitionListener {
             .addAction(0, getString(R.string.stop), PendingIntent.getService(this, 2, stop, PendingIntent.FLAG_IMMUTABLE)).build()
         startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
+        sendStatus(true)
         listen()
     }
 
@@ -46,14 +50,23 @@ class VoiceRecognitionService : Service(), RecognitionListener {
     private fun process(results: Bundle?) {
         val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
         val commands = CommandRepository(this).load()
-        val match = heard.asSequence().map { it.lowercase(Locale.getDefault()).trim() }
-            .flatMap { spoken -> commands.asSequence().filter { spoken.contains(it.phrase.lowercase(Locale.getDefault()).trim()) } }
-            .maxByOrNull { it.phrase.length }
-        if (match != null) CommandExecutor.execute(this, match)
+        val spoken = heard.firstOrNull().orEmpty()
+        sendBroadcast(Intent(ACTION_UPDATE).setPackage(packageName).putExtra(EXTRA_PHRASE, spoken))
+        val match = heard.asSequence().mapNotNull { CommandMatcher.find(it, commands) }.firstOrNull()
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (match != null && (match.id != lastCommandId || now - lastExecution > 1800)) {
+            lastCommandId = match.id; lastExecution = now
+            MacroExecutor(this).execute(match)
+            sendBroadcast(Intent(ACTION_UPDATE).setPackage(packageName).putExtra(EXTRA_COMMAND, match.name))
+        }
     }
 
     override fun onResults(results: Bundle?) { process(results); listen() }
-    override fun onError(error: Int) { android.os.Handler(mainLooper).postDelayed(::listen, if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1000 else 350) }
+    override fun onError(error: Int) {
+        val destructive = error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
+        restart.postDelayed({ if (!stopping) { if (destructive) recreateRecognizer(); listen() } }, if (destructive) 1200 else 450)
+    }
+    private fun recreateRecognizer() { recognizer?.destroy(); recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) } }
     override fun onReadyForSpeech(params: Bundle?) = Unit
     override fun onBeginningOfSpeech() = Unit
     override fun onRmsChanged(rmsdB: Float) = Unit
@@ -62,12 +75,17 @@ class VoiceRecognitionService : Service(), RecognitionListener {
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
     override fun onBind(intent: Intent?): IBinder? = null
-    override fun onDestroy() { stopping = true; recognizer?.destroy(); recognizer = null; super.onDestroy() }
+    override fun onDestroy() { stopping = true; restart.removeCallbacksAndMessages(null); recognizer?.cancel(); recognizer?.destroy(); recognizer = null; sendStatus(false); super.onDestroy() }
+    private fun sendStatus(active: Boolean) = sendBroadcast(Intent(ACTION_UPDATE).setPackage(packageName).putExtra(EXTRA_ACTIVE, active))
 
     private fun createChannel() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, getString(R.string.channel_name), NotificationManager.IMPORTANCE_LOW)
         )
     }
-    companion object { const val ACTION_STOP = "com.example.cmdvox.STOP"; private const val CHANNEL = "voice"; private const val NOTIFICATION_ID = 7 }
+    companion object {
+        const val ACTION_STOP = "com.example.cmdvox.STOP"; const val ACTION_UPDATE = "com.example.cmdvox.UPDATE"
+        const val EXTRA_ACTIVE = "active"; const val EXTRA_PHRASE = "phrase"; const val EXTRA_COMMAND = "command"
+        private const val CHANNEL = "voice"; private const val NOTIFICATION_ID = 7
+    }
 }
